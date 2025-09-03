@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Excel Merger</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      background: #f9f9f9;
+    }
+    .container {
+      background: #fff;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+      max-width: 900px;
+      margin: auto;
+    }
+    h2 {
+      text-align: center;
+    }
+    input[type=file], select, button {
+      display: block;
+      margin: 15px 0;
+      padding: 10px;
+      font-size: 16px;
+    }
+    button {
+      border: none;
+      border-radius: 8px;
+      background: #4CAF50;
+      color: #fff;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #45a049;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+    }
+    table, th, td {
+      border: 1px solid #ccc;
+    }
+    th, td {
+      padding: 8px;
+      text-align: center;
+    }
+    tbody tr:nth-child(even) {
+      background: #f2f2f2;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Excel Merger Tool</h2>
+
+    <label>Select Excel files:</label>
+    <input type="file" id="fileInput" multiple accept=".xlsx">
+
+    <label>Select Province (fills Column 5):</label>
+    <select id="provinceSelect">
+      <option value="Catanduanes">Catanduanes</option>
+      <option value="Sorsogon">Sorsogon</option>
+      <option value="Albay">Albay</option>
+      <option value="Masbate">Masbate</option>
+      <option value="Camarines Sur">Camarines Sur</option>
+      <option value="Camarines Norte">Camarines Norte</option>
+    </select>
+
+    <button onclick="downloadFile()">Download</button>
+
+    <div id="preview"></div>
+  </div>
+
+  <!-- SheetJS library -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script>
+    let mergedData = [];
+
+    document.getElementById("fileInput").addEventListener("change", processFiles);
+    document.getElementById("provinceSelect").addEventListener("change", updateProvince);
+
+    async function processFiles(event) {
+      const input = event.target;
+      if (!input.files.length) {
+        return;
+      }
+
+      mergedData = []; // reset data
+      const selectedProvince = document.getElementById("provinceSelect").value;
+
+      for (let file of input.files) {
+        const arrayBuffer = await file.arrayBuffer();
+        const workbook = XLSX.read(arrayBuffer, { type: "array" });
+        const sheetName = workbook.SheetNames[0];
+        const sheet = workbook.Sheets[sheetName];
+        const data = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+
+        // Extract CODE, NAME from filename
+        const fileName = file.name.replace(".xlsx", "");
+        const [CODE, NAME] = fileName.split("_");
+
+        // Process rows (skip first row of the uploaded file)
+        for (let i = 1; i < data.length; i++) {
+          const row = data[i];
+          mergedData.push([
+            CODE || "",
+            NAME || "",
+            row[0] || "",
+            "V",
+            selectedProvince,
+            row[1] || ""
+          ]);
+        }
+      }
+
+      displayPreview();
+    }
+
+    function updateProvince() {
+      if (!mergedData.length) return;
+
+      const selectedProvince = document.getElementById("provinceSelect").value;
+      mergedData = mergedData.map(row => {
+        row[4] = selectedProvince;
+        return row;
+      });
+
+      displayPreview();
+    }
+
+    function displayPreview() {
+      const preview = document.getElementById("preview");
+      if (!mergedData.length) {
+        preview.innerHTML = "<p>No data to display.</p>";
+        return;
+      }
+
+      let html = "<table><thead><tr>";
+      html += "<th>Code</th><th>Name</th><th>Data Col1</th><th>V</th><th>Province</th><th>Data Col2</th>";
+      html += "</tr></thead><tbody>";
+
+      mergedData.forEach(row => {
+        html += "<tr>";
+        row.forEach(cell => {
+          html += `<td>${cell}</td>`;
+        });
+        html += "</tr>";
+      });
+
+      html += "</tbody></table>";
+      preview.innerHTML = html;
+    }
+
+    function downloadFile() {
+      if (!mergedData.length) {
+        alert("No data to download. Please upload files first.");
+        return;
+      }
+
+      const ws = XLSX.utils.aoa_to_sheet(mergedData);
+
+      // Add dropdown validation to column E
+      const provinces = "Catanduanes,Sorsogon,Albay,Masbate,Camarines Sur,Camarines Norte";
+      ws['!dataValidation'] = [{
+        type: 'list',
+        allowBlank: true,
+        sqref: 'E1:E1048576',
+        formulas: [provinces]
+      }];
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Merged");
+
+      XLSX.writeFile(wb, "merged.xlsx");
+    }
+  </script>
+</body>
+</html>
